@@ -1,0 +1,6 @@
+#Command to run shiny
+R -e "shiny::runApp('~/shinyapp')"
+
+#Commands for rJava fix for RStudio
+sudo R CMD javareconf
+sudo ln -s $(/usr/libexec/java_home)/jre/lib/server/libjvm.dylib /Library/Frameworks/R.framework/Libraries
