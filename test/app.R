@@ -1,52 +1,63 @@
-library(shiny)
-library(shinyjqui)
-library(shinyAce)
+###Test###
+
 library(rJava)
 library(AWR.Athena)
+library(DBI)
+library(shiny)
+library(shinyAce)
+library(shinyjqui)
+library(shinyWidgets)
 
-# Define UI for app that draws a histogram ----
+#con <- AWR.Athena::dbConnect(AWR.Athena::Athena(), region='eu-central-1',
+#                        s3_staging_dir='s3://aws-athena-query-results-081365034257-eu-central-1/',
+#                        schema_name='my_database')
+
+#dbListTables(con)
+
+#dbGetQuery(con, "select vendor_id, count(vendor_id) from my_database.parquet group by vendor_id")
+
 ui <- fluidPage(
   
   titlePanel("Big Data Dashboard!"),
   
   sidebarLayout(
-    
     sidebarPanel(
-      aceEditor(
-      outputId = "sqlEditor", 
-      value = "select * from", 
-      mode = "sql", 
-      theme = "ambiance",
-      height = "200px",
-      hotkeys = list(
-        helpKey = "F1",
-        runKey = list(
-          win = "Ctrl-R|Ctrl-Shift-Enter",
-          mac = "CMD-ENTER|CMD-SHIFT-ENTER"
-        )
+      div(class="SQLEditor",
+          aceEditor(
+            outputId = "sqlEditor", 
+            value = "select * from", 
+            mode = "sql", 
+            theme = "ambiance",
+            height = "200px",
+            hotkeys = list(
+              helpKey = "F1",
+              runKey = list(
+                win = "Ctrl-R|Ctrl-Shift-Enter",
+                mac = "CMD-ENTER|CMD-SHIFT-ENTER"
+              )
+            )
+          ),
+          actionButton("runquery", "Run")
+      )
     ),
-    width = 12
-    ),
-    
-    jqui_draggable(sidebarPanel(
-      
-      sliderInput(inputId = "bins",
-                  label = "Number of bins:",
-                  min = 1,
-                  max = 50,
-                  value = 30)
-      
-    ))),
-    
     # Main panel for displaying outputs ----
     mainPanel(
-      tableOutput("tbl")
+      jqui_draggable(dataTableOutput("tbl")),
+      dropdownButton(
+        tags$h3("Choose the graph type and parameters"),
+        selectInput(inputId = 'xcol', label = 'X Variable', choices = c("A", "B", "C")),
+        selectInput(inputId = 'ycol', label = 'Y Variable', choices = c("X", "Y", "Z"), selected = "A"),
+        sliderInput(inputId = 'clusters', label = 'Cluster count', value = 3, min = 1, max = 9),
+        circle = TRUE, status = "danger", icon = icon("gear"), width = "300px",
+        tooltip = tooltipOptions(title = "Click to see inputs !")
+      )
+    )
   )
-)
 )
 
 
 server <- function(input, output) {
+  con=reactiveValues(cc=NULL)
   
   mdl <- modalDialog(
     title = "Please Enter Your Details for Athena Access",
@@ -58,21 +69,27 @@ server <- function(input, output) {
       actionButton("run", "Submit")
     )
   )
+  
   showModal(mdl)
   
   observeEvent(
-    eventExpr = input[["run"]],
-    handlerExpr = {
-  removeModal()
-  #how to render custom object???
-  output$tbl <- renderTable({
-    con <- AWR.Athena::dbConnect(AWR.Athena::Athena(), region=input$region,
-                                 s3_staging_dir=input$stagingdir,
-                                 schema_name=input$schema)
-    dbGetQuery(con,
-      input$sqlEditor)
+    eventExpr = input[["run"]], {
+      removeModal()
+      con$cc <- AWR.Athena::dbConnect(AWR.Athena::Athena(), region=input$region,
+                                   s3_staging_dir=input$stagingdir,
+                                   schema_name=input$schema)
     })
+  
+  #"select * from my_database.parquet limit 10"
+  #works, just check how it works with run quesry button.
+  df <- eventReactive(eventExpr = input[["runquery"]], {
+    tbl <- dbGetQuery(con$cc, input$sqlEditor)
+    return(tbl)
   })
+
+  output$tbl <- renderDataTable({
+    df()
+  }, options = list(scrollX = TRUE,  scrollCollapse = TRUE))
   
 }
 

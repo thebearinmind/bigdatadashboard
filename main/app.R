@@ -1,15 +1,11 @@
+###Main###
+
 library(rJava)
 library(AWR.Athena)
 library(DBI)
 library(shiny)
-
-#con <- AWR.Athena::dbConnect(AWR.Athena::Athena(), region='eu-central-1',
-#                        s3_staging_dir='s3://aws-athena-query-results-081365034257-eu-central-1/',
-#                        schema_name='my_database')
-
-#dbListTables(con)
-
-#dbGetQuery(con, "select vendor_id, count(vendor_id) from my_database.parquet group by vendor_id")
+library(shinyAce)
+library(shinyjqui)
 
 ui <- fluidPage(
   
@@ -30,17 +26,20 @@ ui <- fluidPage(
             mac = "CMD-ENTER|CMD-SHIFT-ENTER"
           )
         )
-      )
       ),
+      actionButton("runquery", "Run")
+    ),
     # Main panel for displaying outputs ----
     mainPanel(
-      dataTableOutput("tbl")
+      jqui_draggable(dataTableOutput("tbl"))
     )
   )
 )
-  
-  
+
+
 server <- function(input, output) {
+  con=reactiveValues(cc=NULL)
+  
   mdl <- modalDialog(
     title = "Please Enter Your Details for Athena Access",
     textInput('region','Region'),
@@ -54,20 +53,23 @@ server <- function(input, output) {
   
   showModal(mdl)
   
-  dbcon <- eventReactive(
+  observeEvent(
     eventExpr = input[["run"]], {
       removeModal()
-      con <- AWR.Athena::dbConnect(AWR.Athena::Athena(), region=input$region,
-                                     s3_staging_dir=input$stagingdir,
-                                     schema_name=input$schema)
-      return(con)
-      })
-  #"select * from my_database.parquet limit 10"
-  #works, just check how it works with run quesry button.
-  output$tbl <- renderDataTable({
-    dbGetQuery(dbcon(), input$sqlEditor)
+      con$cc <- AWR.Athena::dbConnect(AWR.Athena::Athena(), region=input$region,
+                                      s3_staging_dir=input$stagingdir,
+                                      schema_name=input$schema)
+    })
+  
+  df <- eventReactive(eventExpr = input[["runquery"]], {
+    tbl <- dbGetQuery(con$cc, input$sqlEditor)
   })
-
+  
+  output$tbl <- renderDataTable({
+    df()
+  }, options = list(scrollX = TRUE,  scrollCollapse = TRUE))
+  
+  
 }
 
 shinyApp(ui = ui, server = server)
